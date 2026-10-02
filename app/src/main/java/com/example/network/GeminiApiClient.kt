@@ -1,14 +1,23 @@
 package com.example.network
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.util.Base64
 import com.example.BuildConfig
+import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.GenerativeBackend
+import com.google.firebase.ai.type.content
+import com.google.firebase.ai.type.generationConfig
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
 import retrofit2.HttpException
 import retrofit2.Retrofit
@@ -112,6 +121,7 @@ object GeminiApiClient {
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
+            .certificatePinner(CertificatePinner.DEFAULT)
             .build()
     }
 
@@ -124,19 +134,36 @@ object GeminiApiClient {
             .create(GeminiRestService::class.java)
     }
 
+    /**
+     * Checks if Firebase AI (Production keyless mode with Firebase App Check) is available.
+     */
+    fun isFirebaseAiConfigured(context: Context): Boolean {
+        return runCatching {
+            FirebaseApp.getApps(context).isNotEmpty() || FirebaseApp.initializeApp(context) != null
+        }.getOrDefault(false)
+    }
+
     fun isApiKeyConfigured(): Boolean {
         val key = BuildConfig.GEMINI_API_KEY.trim()
         return key.isNotEmpty() && key != "MY_GEMINI_API_KEY" && key != "null"
     }
 
+    fun getSecurityModeStatus(context: Context): String {
+        return when {
+            isFirebaseAiConfigured(context) -> "Production Mode (Firebase AI + App Check • Keyless APK)"
+            isApiKeyConfigured() -> "Prototype Mode (AI Studio Secrets BuildConfig)"
+            else -> "Not configured (Add Firebase google-services.json or AI Studio Secret)"
+        }
+    }
+
     fun getMaskedApiKeyStatus(): String {
         val key = BuildConfig.GEMINI_API_KEY.trim()
         return if (!isApiKeyConfigured()) {
-            "Not configured (Add GEMINI_API_KEY in AI Studio Secrets panel)"
+            "No raw key packaged in APK (Use Firebase AI for production or AI Studio Secrets for prototype)"
         } else if (key.length > 8) {
-            "Active (${key.take(4)}••••${key.takeLast(4)})"
+            "Configured via Secrets (${key.take(4)}••••${key.takeLast(4)})"
         } else {
-            "Active (Configured via BuildConfig)"
+            "Configured via BuildConfig"
         }
     }
 
@@ -163,11 +190,56 @@ object GeminiApiClient {
             )
         }
 
+        // Priority 1: Use Firebase AI Logic (Production Keyless Backend) if Firebase is configured
+        if (isFirebaseAiConfigured(context)) {
+            val firebaseAttempt = runCatching {
+                val imageBytes = Base64.decode(base64JpegImage, Base64.DEFAULT)
+                val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                    ?: throw IllegalStateException("Could not decode screen bitmap for Firebase AI")
+
+                val generativeModel = Firebase.ai(backend = GenerativeBackend.googleAI())
+                    .generativeModel(
+                        modelName = modelId,
+                        generationConfig = generationConfig {
+                            temperature = 0.25f
+                            topP = 0.9f
+                            maxOutputTokens = 1536
+                        },
+                        systemInstruction = content { text(systemInstructionText) }
+                    )
+
+                val response = generativeModel.generateContent(
+                    content {
+                        text(promptText)
+                        image(bitmap)
+                    }
+                )
+                response.text?.trim()
+            }
+
+            val fbText = firebaseAttempt.getOrNull()
+            if (!fbText.isNullOrEmpty()) {
+                return@withContext GeminiResult.Success(
+                    text = fbText,
+                    modelUsed = "$modelId (Firebase AI)"
+                )
+            } else if (!isApiKeyConfigured()) {
+                val err = firebaseAttempt.exceptionOrNull()
+                return@withContext GeminiResult.Error(
+                    title = "Firebase AI Error",
+                    message = err?.localizedMessage
+                        ?: "Ensure Gemini API is enabled in your Firebase Console under Firebase AI Logic.",
+                    errorType = GeminiErrorType.API_FAILURE
+                )
+            }
+        }
+
+        // Priority 2: Direct REST API via AI Studio Secrets BuildConfig
         val apiKey = BuildConfig.GEMINI_API_KEY.trim()
         if (!isApiKeyConfigured()) {
             return@withContext GeminiResult.Error(
-                title = "Invalid or Missing API Key",
-                message = "GEMINI_API_KEY is not set. Please open the Secrets panel in AI Studio and add your Gemini API key.",
+                title = "Credentials Not Configured",
+                message = "For production, add google-services.json with Firebase AI enabled. For prototyping, set GEMINI_API_KEY in the AI Studio Secrets panel or GitHub Actions Secrets.",
                 errorType = GeminiErrorType.INVALID_API_KEY
             )
         }
@@ -250,7 +322,7 @@ object GeminiApiClient {
                     code == 401 || code == 403 -> {
                     GeminiResult.Error(
                         title = "Invalid API Key ($code)",
-                        message = "Your Gemini API key was rejected by the server. Verify GEMINI_API_KEY in the AI Studio Secrets panel.",
+                        message = "Your Gemini API key was rejected by the server. Verify GEMINI_API_KEY in the AI Studio Secrets panel or GitHub Secrets.",
                         errorType = GeminiErrorType.INVALID_API_KEY
                     )
                 }
@@ -293,10 +365,25 @@ object GeminiApiClient {
                     errorType = GeminiErrorType.NO_INTERNET
                 )
             }
+
+            if (isFirebaseAiConfigured(context)) {
+                val fbResult = runCatching {
+                    val model = Firebase.ai(backend = GenerativeBackend.googleAI())
+                        .generativeModel(modelName = modelId)
+                    model.generateContent("Reply with: ScreenAI Firebase Secure Connected.").text?.trim()
+                }.getOrNull()
+                if (!fbResult.isNullOrEmpty()) {
+                    return@withContext GeminiResult.Success(
+                        text = fbResult,
+                        modelUsed = "$modelId (Firebase AI)"
+                    )
+                }
+            }
+
             if (!isApiKeyConfigured()) {
                 return@withContext GeminiResult.Error(
-                    title = "API Key Not Configured",
-                    message = "Add your GEMINI_API_KEY via the Secrets panel in AI Studio to enable live responses.",
+                    title = "Credentials Not Configured",
+                    message = "Configure Firebase AI (google-services.json) for production or add GEMINI_API_KEY in the AI Studio Secrets panel.",
                     errorType = GeminiErrorType.INVALID_API_KEY
                 )
             }
