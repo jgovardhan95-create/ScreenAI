@@ -347,6 +347,12 @@ fun TestScreenAiScreen(
                     },
                     onSaveScreenshotExplicitly = {
                         OverlayStateController.saveCapturedFrameExplicitly(context)
+                    },
+                    onInlineApiKeyChange = {
+                        OverlayStateController.updateInlineApiKeyDraft(it)
+                    },
+                    onSaveInlineApiKeyAndRetry = { key ->
+                        OverlayStateController.saveInlineApiKeyAndRetry(context, key)
                     }
                 )
             }

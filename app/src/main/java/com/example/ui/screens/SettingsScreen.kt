@@ -42,12 +42,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -79,6 +84,7 @@ fun SettingsScreen(
     onVerifyApiConnection: () -> Unit,
     onClearTemporaryData: () -> Unit,
     onNavigateBack: () -> Unit,
+    onSaveCustomApiKey: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler {
@@ -146,11 +152,14 @@ fun SettingsScreen(
 
             // 1. Gemini API Configuration
             item {
+                var apiKeyInput by remember(settings.customApiKey) {
+                    mutableStateOf(settings.customApiKey)
+                }
                 SettingsSectionCard(
                     icon = Icons.Default.Key,
                     title = "Gemini API Configuration"
                 ) {
-                    val isConfigured = GeminiApiClient.isApiKeyConfigured()
+                    val isConfigured = GeminiApiClient.isApiKeyConfigured(settings.customApiKey)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -158,12 +167,12 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "BuildConfig.GEMINI_API_KEY",
+                                text = "Gemini API Status",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = GeminiApiClient.getMaskedApiKeyStatus(),
+                                text = GeminiApiClient.getMaskedApiKeyStatus(settings.customApiKey),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isConfigured) EmeraldPulse else AmberWarning
                             )
@@ -176,13 +185,47 @@ fun SettingsScreen(
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "API keys are managed securely via the Secrets panel in Google AI Studio (.env -> BuildConfig.GEMINI_API_KEY).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    OutlinedTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        label = { Text("Gemini API Key (AIza...)") },
+                        placeholder = { Text("Paste key from aistudio.google.com/app/apikey") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("settings_api_key_input")
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = { onSaveCustomApiKey(apiKeyInput) },
+                            enabled = apiKeyInput.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("save_api_key_button")
+                        ) {
+                            Text("Save & Verify Key")
+                        }
+                        if (settings.customApiKey.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = {
+                                    apiKeyInput = ""
+                                    onSaveCustomApiKey("")
+                                },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Clear")
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = onVerifyApiConnection,
                         shape = RoundedCornerShape(12.dp),

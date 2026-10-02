@@ -106,7 +106,9 @@ fun FloatingAssistantOverlayRoot(
     onSubmitCustomQuery: (String) -> Unit,
     onCopyResponse: () -> Unit,
     onRegenerate: (Boolean) -> Unit,
-    onSaveScreenshotExplicitly: () -> Unit
+    onSaveScreenshotExplicitly: () -> Unit,
+    onInlineApiKeyChange: (String) -> Unit = {},
+    onSaveInlineApiKeyAndRetry: (String) -> Unit = {}
 ) {
     // When capturing the screen, hide the overlay completely so it never obscures underlying app content
     if (uiState.isOverlayHiddenForCapture) {
@@ -146,7 +148,9 @@ fun FloatingAssistantOverlayRoot(
                 onSubmitCustomQuery = onSubmitCustomQuery,
                 onCopyResponse = onCopyResponse,
                 onRegenerate = onRegenerate,
-                onSaveScreenshotExplicitly = onSaveScreenshotExplicitly
+                onSaveScreenshotExplicitly = onSaveScreenshotExplicitly,
+                onInlineApiKeyChange = onInlineApiKeyChange,
+                onSaveInlineApiKeyAndRetry = onSaveInlineApiKeyAndRetry
             )
         }
     }
@@ -334,7 +338,9 @@ fun FloatingAiPanelCard(
     onSubmitCustomQuery: (String) -> Unit,
     onCopyResponse: () -> Unit,
     onRegenerate: (Boolean) -> Unit,
-    onSaveScreenshotExplicitly: () -> Unit
+    onSaveScreenshotExplicitly: () -> Unit,
+    onInlineApiKeyChange: (String) -> Unit = {},
+    onSaveInlineApiKeyAndRetry: (String) -> Unit = {}
 ) {
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -688,15 +694,52 @@ fun FloatingAiPanelCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.height(10.dp))
+                            if (uiState.needsApiKeyInput) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                OutlinedTextField(
+                                    value = uiState.inlineApiKeyDraft,
+                                    onValueChange = onInlineApiKeyChange,
+                                    placeholder = {
+                                        Text(
+                                            "Paste Gemini API Key (AIza...)",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    },
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodySmall,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("overlay_inline_api_key_input")
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            } else {
+                                Spacer(modifier = Modifier.height(10.dp))
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
+                                if (uiState.needsApiKeyInput) {
+                                    Button(
+                                        onClick = { onSaveInlineApiKeyAndRetry(uiState.inlineApiKeyDraft) },
+                                        enabled = uiState.inlineApiKeyDraft.isNotBlank(),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary
+                                        ),
+                                        modifier = Modifier
+                                            .height(38.dp)
+                                            .testTag("overlay_save_api_key_button")
+                                    ) {
+                                        Text("Save Key & Answer", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+                                OutlinedButton(
                                     onClick = { onRegenerate(true) },
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    modifier = Modifier.height(36.dp)
+                                    modifier = Modifier.height(38.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Refresh,

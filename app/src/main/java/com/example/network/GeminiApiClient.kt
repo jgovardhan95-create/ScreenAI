@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Base64
 import com.example.BuildConfig
+import com.example.data.SettingsRepository
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.ai.ai
@@ -16,6 +17,7 @@ import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
@@ -134,36 +136,37 @@ object GeminiApiClient {
             .create(GeminiRestService::class.java)
     }
 
-    /**
-     * Checks if Firebase AI (Production keyless mode with Firebase App Check) is available.
-     */
     fun isFirebaseAiConfigured(context: Context): Boolean {
         return runCatching {
             FirebaseApp.getApps(context).isNotEmpty() || FirebaseApp.initializeApp(context) != null
         }.getOrDefault(false)
     }
 
-    fun isApiKeyConfigured(): Boolean {
+    fun isBuildConfigApiKeyValid(): Boolean {
         val key = BuildConfig.GEMINI_API_KEY.trim()
         return key.isNotEmpty() && key != "MY_GEMINI_API_KEY" && key != "null"
     }
 
-    fun getSecurityModeStatus(context: Context): String {
-        return when {
-            isFirebaseAiConfigured(context) -> "Production Mode (Firebase AI + App Check • Keyless APK)"
-            isApiKeyConfigured() -> "Prototype Mode (AI Studio Secrets BuildConfig)"
-            else -> "Not configured (Add Firebase google-services.json or AI Studio Secret)"
-        }
+    fun resolveActiveApiKey(customApiKey: String = ""): String {
+        val trimmedCustom = customApiKey.trim()
+        if (trimmedCustom.isNotEmpty()) return trimmedCustom
+        val buildKey = BuildConfig.GEMINI_API_KEY.trim()
+        return if (isBuildConfigApiKeyValid()) buildKey else ""
     }
 
-    fun getMaskedApiKeyStatus(): String {
-        val key = BuildConfig.GEMINI_API_KEY.trim()
-        return if (!isApiKeyConfigured()) {
-            "No raw key packaged in APK (Use Firebase AI for production or AI Studio Secrets for prototype)"
-        } else if (key.length > 8) {
-            "Configured via Secrets (${key.take(4)}••••${key.takeLast(4)})"
+    fun isApiKeyConfigured(customApiKey: String = ""): Boolean {
+        return resolveActiveApiKey(customApiKey).isNotEmpty()
+    }
+
+    fun getMaskedApiKeyStatus(customApiKey: String = ""): String {
+        val activeKey = resolveActiveApiKey(customApiKey)
+        val sourceLabel = if (customApiKey.trim().isNotEmpty()) "App Settings" else "BuildConfig"
+        return if (activeKey.isEmpty()) {
+            "Not configured — Paste your Gemini API key below or in the floating panel"
+        } else if (activeKey.length > 8) {
+            "Active via $sourceLabel (${activeKey.take(4)}••••${activeKey.takeLast(4)})"
         } else {
-            "Configured via BuildConfig"
+            "Active via $sourceLabel"
         }
     }
 
@@ -173,6 +176,17 @@ object GeminiApiClient {
         val network = cm.activeNetwork ?: return false
         val capabilities = cm.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun buildModelFallbackList(preferredModelId: String): List<String> {
+        return listOf(
+            preferredModelId,
+            "gemini-flash-latest",
+            "gemini-2.5-flash",
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite-preview",
+            "gemini-2.0-flash"
+        ).distinct()
     }
 
     suspend fun analyzeScreenWithGemini(
@@ -190,8 +204,14 @@ object GeminiApiClient {
             )
         }
 
-        // Priority 1: Use Firebase AI Logic (Production Keyless Backend) if Firebase is configured
-        if (isFirebaseAiConfigured(context)) {
+        val savedCustomKey = runCatching {
+            SettingsRepository.getInstance(context.applicationContext).settingsFlow.first().customApiKey
+        }.getOrDefault("")
+
+        val apiKey = resolveActiveApiKey(savedCustomKey)
+
+        // Priority 1: If no API key is entered, try Firebase AI Logic if configured
+        if (apiKey.isEmpty() && isFirebaseAiConfigured(context)) {
             val firebaseAttempt = runCatching {
                 val imageBytes = Base64.decode(base64JpegImage, Base64.DEFAULT)
                 val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
@@ -223,23 +243,14 @@ object GeminiApiClient {
                     text = fbText,
                     modelUsed = "$modelId (Firebase AI)"
                 )
-            } else if (!isApiKeyConfigured()) {
-                val err = firebaseAttempt.exceptionOrNull()
-                return@withContext GeminiResult.Error(
-                    title = "Firebase AI Error",
-                    message = err?.localizedMessage
-                        ?: "Ensure Gemini API is enabled in your Firebase Console under Firebase AI Logic.",
-                    errorType = GeminiErrorType.API_FAILURE
-                )
             }
         }
 
-        // Priority 2: Direct REST API via AI Studio Secrets BuildConfig
-        val apiKey = BuildConfig.GEMINI_API_KEY.trim()
-        if (!isApiKeyConfigured()) {
+        // Priority 2: Direct REST API using saved custom key or BuildConfig key
+        if (apiKey.isEmpty()) {
             return@withContext GeminiResult.Error(
-                title = "Credentials Not Configured",
-                message = "For production, add google-services.json with Firebase AI enabled. For prototyping, set GEMINI_API_KEY in the AI Studio Secrets panel or GitHub Actions Secrets.",
+                title = "API Key Required",
+                message = "Paste your Gemini API key below (or in ScreenAI Settings) to start analyzing your screen immediately.",
                 errorType = GeminiErrorType.INVALID_API_KEY
             )
         }
@@ -269,88 +280,111 @@ object GeminiApiClient {
             )
         )
 
-        try {
-            val response = service.generateContent(
-                model = modelId,
-                apiKey = apiKey,
-                request = request
-            )
+        val candidateModels = buildModelFallbackList(modelId)
+        var lastException: Exception? = null
 
-            val blockReason = response.promptFeedback?.blockReason
-            if (!blockReason.isNullOrBlank()) {
-                return@withContext GeminiResult.Error(
-                    title = "Content Blocked",
-                    message = "Gemini could not process this screen (Reason: $blockReason).",
-                    errorType = GeminiErrorType.API_FAILURE
+        for (candidateModel in candidateModels) {
+            try {
+                val response = service.generateContent(
+                    model = candidateModel,
+                    apiKey = apiKey,
+                    request = request
                 )
-            }
 
-            val answerText = response.candidates
-                ?.firstOrNull()
-                ?.content
-                ?.parts
-                ?.mapNotNull { it.text }
-                ?.joinToString("\n")
-                ?.trim()
+                val blockReason = response.promptFeedback?.blockReason
+                if (!blockReason.isNullOrBlank()) {
+                    return@withContext GeminiResult.Error(
+                        title = "Content Blocked",
+                        message = "Gemini could not process this screen (Reason: $blockReason).",
+                        errorType = GeminiErrorType.API_FAILURE
+                    )
+                }
 
-            if (answerText.isNullOrEmpty()) {
-                GeminiResult.Error(
-                    title = "Empty AI Response",
-                    message = "Gemini analyzed the screenshot but returned no text. Try selecting another mode or tapping Regenerate.",
-                    errorType = GeminiErrorType.EMPTY_RESPONSE
-                )
-            } else {
-                GeminiResult.Success(text = answerText, modelUsed = modelId)
+                val answerText = response.candidates
+                    ?.firstOrNull()
+                    ?.content
+                    ?.parts
+                    ?.mapNotNull { it.text }
+                    ?.joinToString("\n")
+                    ?.trim()
+
+                if (!answerText.isNullOrEmpty()) {
+                    return@withContext GeminiResult.Success(
+                        text = answerText,
+                        modelUsed = candidateModel
+                    )
+                } else {
+                    return@withContext GeminiResult.Error(
+                        title = "Empty AI Response",
+                        message = "Gemini analyzed the screenshot but returned no text. Tap Regenerate to try again.",
+                        errorType = GeminiErrorType.EMPTY_RESPONSE
+                    )
+                }
+            } catch (e: HttpException) {
+                lastException = e
+                // If 404 (Model not found in this region/tier), automatically try the next fallback model
+                if (e.code() == 404) {
+                    continue
+                }
+                break
+            } catch (e: Exception) {
+                lastException = e
+                break
             }
-        } catch (e: SocketTimeoutException) {
-            GeminiResult.Error(
+        }
+
+        return@withContext mapExceptionToGeminiError(lastException, apiKey)
+    }
+
+    private fun mapExceptionToGeminiError(e: Exception?, usedKey: String): GeminiResult.Error {
+        return when (e) {
+            is SocketTimeoutException -> GeminiResult.Error(
                 title = "AI Response Timeout",
-                message = "The request took too long to complete. Try switching to Gemini 3.5 Flash or check your connection speed.",
+                message = "The request took too long to complete. Check your connection speed and tap Retry.",
                 errorType = GeminiErrorType.TIMEOUT
             )
-        } catch (e: UnknownHostException) {
-            GeminiResult.Error(
+            is UnknownHostException -> GeminiResult.Error(
                 title = "Network Unreachable",
                 message = "Could not reach Google Gemini servers. Please check your internet connection.",
                 errorType = GeminiErrorType.NO_INTERNET
             )
-        } catch (e: HttpException) {
-            val code = e.code()
-            val errorBody = runCatching { e.response()?.errorBody()?.string() }.getOrNull().orEmpty()
-            when {
-                code == 400 && errorBody.contains("API_KEY_INVALID", ignoreCase = true) ||
-                    code == 401 || code == 403 -> {
-                    GeminiResult.Error(
-                        title = "Invalid API Key ($code)",
-                        message = "Your Gemini API key was rejected by the server. Verify GEMINI_API_KEY in the AI Studio Secrets panel or GitHub Secrets.",
-                        errorType = GeminiErrorType.INVALID_API_KEY
-                    )
-                }
-                code == 429 -> {
-                    GeminiResult.Error(
+            is HttpException -> {
+                val code = e.code()
+                val errorBody = runCatching { e.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+                when {
+                    code == 400 && errorBody.contains("API_KEY_INVALID", ignoreCase = true) ||
+                        code == 401 || code == 403 -> {
+                        val formatHint = if (!usedKey.startsWith("AIza")) {
+                            " Note: Standard Google AI Studio Gemini API keys start with 'AIza...' (from aistudio.google.com/app/apikey)."
+                        } else {
+                            ""
+                        }
+                        GeminiResult.Error(
+                            title = "Invalid Gemini API Key ($code)",
+                            message = "The API key was rejected by Google Gemini servers.$formatHint Please paste a valid Gemini API key below.",
+                            errorType = GeminiErrorType.INVALID_API_KEY
+                        )
+                    }
+                    code == 429 -> GeminiResult.Error(
                         title = "Rate Limit Reached (429)",
-                        message = "Too many requests sent to Gemini API in a short window. Please wait a few seconds and tap Regenerate.",
+                        message = "Quota or rate limit reached on this API key. Wait a few seconds and tap Retry.",
                         errorType = GeminiErrorType.API_FAILURE
                     )
-                }
-                else -> {
-                    GeminiResult.Error(
+                    else -> GeminiResult.Error(
                         title = "Gemini API Error ($code)",
-                        message = "The AI service encountered an issue (HTTP $code). Please try regenerating or switching models in Settings.",
+                        message = "The AI service returned HTTP $code. Please try again or switch models in Settings.",
                         errorType = GeminiErrorType.API_FAILURE
                     )
                 }
             }
-        } catch (e: IOException) {
-            GeminiResult.Error(
+            is IOException -> GeminiResult.Error(
                 title = "Network Connection Error",
                 message = "A network error interrupted the screen analysis (${e.localizedMessage ?: "IO error"}).",
                 errorType = GeminiErrorType.NO_INTERNET
             )
-        } catch (e: Exception) {
-            GeminiResult.Error(
+            else -> GeminiResult.Error(
                 title = "AI Processing Failed",
-                message = e.localizedMessage ?: "An unexpected error occurred while communicating with Gemini.",
+                message = e?.localizedMessage ?: "An unexpected error occurred while communicating with Gemini.",
                 errorType = GeminiErrorType.API_FAILURE
             )
         }
@@ -366,7 +400,12 @@ object GeminiApiClient {
                 )
             }
 
-            if (isFirebaseAiConfigured(context)) {
+            val savedCustomKey = runCatching {
+                SettingsRepository.getInstance(context.applicationContext).settingsFlow.first().customApiKey
+            }.getOrDefault("")
+            val apiKey = resolveActiveApiKey(savedCustomKey)
+
+            if (apiKey.isEmpty() && isFirebaseAiConfigured(context)) {
                 val fbResult = runCatching {
                     val model = Firebase.ai(backend = GenerativeBackend.googleAI())
                         .generativeModel(modelName = modelId)
@@ -380,44 +419,46 @@ object GeminiApiClient {
                 }
             }
 
-            if (!isApiKeyConfigured()) {
+            if (apiKey.isEmpty()) {
                 return@withContext GeminiResult.Error(
-                    title = "Credentials Not Configured",
-                    message = "Configure Firebase AI (google-services.json) for production or add GEMINI_API_KEY in the AI Studio Secrets panel.",
+                    title = "API Key Not Set",
+                    message = "Paste your Gemini API key into the field above and tap Save Key first.",
                     errorType = GeminiErrorType.INVALID_API_KEY
                 )
             }
-            try {
-                val request = GenerateContentRequest(
-                    contents = listOf(
-                        Content(
-                            role = "user",
-                            parts = listOf(Part(text = "Reply with: ScreenAI Vision Connected."))
-                        )
-                    ),
-                    generationConfig = GenerationConfig(maxOutputTokens = 32)
-                )
-                val response = service.generateContent(
-                    model = modelId,
-                    apiKey = BuildConfig.GEMINI_API_KEY.trim(),
-                    request = request
-                )
-                val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
-                if (!text.isNullOrEmpty()) {
-                    GeminiResult.Success(text = text, modelUsed = modelId)
-                } else {
-                    GeminiResult.Error(
-                        title = "Empty Verification Response",
-                        message = "Connected to server, but received an empty response.",
-                        errorType = GeminiErrorType.EMPTY_RESPONSE
+
+            val request = GenerateContentRequest(
+                contents = listOf(
+                    Content(
+                        role = "user",
+                        parts = listOf(Part(text = "Reply with: ScreenAI Vision Connected."))
                     )
+                ),
+                generationConfig = GenerationConfig(maxOutputTokens = 32)
+            )
+
+            var lastException: Exception? = null
+            for (candidateModel in buildModelFallbackList(modelId)) {
+                try {
+                    val response = service.generateContent(
+                        model = candidateModel,
+                        apiKey = apiKey,
+                        request = request
+                    )
+                    val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                    if (!text.isNullOrEmpty()) {
+                        return@withContext GeminiResult.Success(text = text, modelUsed = candidateModel)
+                    }
+                } catch (e: HttpException) {
+                    lastException = e
+                    if (e.code() == 404) continue
+                    break
+                } catch (e: Exception) {
+                    lastException = e
+                    break
                 }
-            } catch (e: Exception) {
-                GeminiResult.Error(
-                    title = "Connection Test Failed",
-                    message = e.localizedMessage ?: "Unable to verify Gemini API connection.",
-                    errorType = GeminiErrorType.API_FAILURE
-                )
             }
+
+            mapExceptionToGeminiError(lastException, apiKey)
         }
 }

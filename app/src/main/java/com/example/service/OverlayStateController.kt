@@ -17,6 +17,7 @@ import com.example.data.SettingsRepository
 import com.example.imaging.ImageProcessor
 import com.example.imaging.ProcessedScreenImage
 import com.example.network.GeminiApiClient
+import com.example.network.GeminiErrorType
 import com.example.network.GeminiResult
 import com.example.prompt.PromptGenerator
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +56,8 @@ data class OverlayUiState(
     val aiResponse: String = "",
     val errorTitle: String? = null,
     val errorMessage: String? = null,
+    val needsApiKeyInput: Boolean = false,
+    val inlineApiKeyDraft: String = "",
     val lastCapturedPreview: Bitmap? = null,
     val lastBase64Image: String? = null,
     val modelBadge: String = "",
@@ -123,6 +126,29 @@ object OverlayStateController {
 
     fun updateCustomAskText(text: String) {
         _uiState.update { it.copy(customAskText = text) }
+    }
+
+    fun updateInlineApiKeyDraft(text: String) {
+        _uiState.update { it.copy(inlineApiKeyDraft = text) }
+    }
+
+    fun saveInlineApiKeyAndRetry(context: Context, apiKey: String) {
+        val cleaned = apiKey.trim()
+        if (cleaned.isEmpty()) return
+        val appContext = context.applicationContext
+        scope.launch {
+            SettingsRepository.getInstance(appContext).setCustomApiKey(cleaned)
+            onRequestWindowFocusable?.invoke(false)
+            _uiState.update {
+                it.copy(
+                    needsApiKeyInput = false,
+                    inlineApiKeyDraft = "",
+                    errorTitle = null,
+                    errorMessage = null
+                )
+            }
+            regenerateLastAction(appContext, recaptureScreen = false)
+        }
     }
 
     fun toggleAskAiMode(context: Context) {
@@ -237,7 +263,7 @@ object OverlayStateController {
                 }
 
                 if (explicitBitmap == null) {
-                    delay(140)
+                    delay(180)
                 }
 
                 val captureResult = if (explicitBitmap != null) {
@@ -331,11 +357,16 @@ object OverlayStateController {
                     )
                 }
                 is GeminiResult.Error -> {
+                    val isKeyError = geminiResult.errorType == GeminiErrorType.INVALID_API_KEY
+                    if (isKeyError) {
+                        onRequestWindowFocusable?.invoke(true)
+                    }
                     _uiState.update {
                         it.copy(
                             capturePhase = CapturePhase.ERROR,
                             errorTitle = geminiResult.title,
-                            errorMessage = geminiResult.message
+                            errorMessage = geminiResult.message,
+                            needsApiKeyInput = isKeyError
                         )
                     }
                 }

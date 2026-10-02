@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -215,6 +216,12 @@ class FloatingOverlayService :
                         },
                         onSaveScreenshotExplicitly = {
                             OverlayStateController.saveCapturedFrameExplicitly(applicationContext)
+                        },
+                        onInlineApiKeyChange = {
+                            OverlayStateController.updateInlineApiKeyDraft(it)
+                        },
+                        onSaveInlineApiKeyAndRetry = { key ->
+                            OverlayStateController.saveInlineApiKeyAndRetry(applicationContext, key)
                         }
                     )
                 }
@@ -225,6 +232,11 @@ class FloatingOverlayService :
             wm.addView(view, params)
             composeOverlayView = view
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        moveOverlayBy(0f, 0f)
     }
 
     private fun moveOverlayBy(dx: Float, dy: Float) {

@@ -122,6 +122,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveCustomApiKey(apiKey: String) {
+        viewModelScope.launch {
+            settingsRepo.setCustomApiKey(apiKey)
+            if (apiKey.trim().isNotEmpty()) {
+                showTemporaryBanner("Gemini API key saved! Testing connection...")
+                verifyGeminiConnection()
+            } else {
+                showTemporaryBanner("Cleared custom API key.")
+                _apiVerificationState.value = ApiVerificationState.Idle
+            }
+        }
+    }
+
     fun verifyGeminiConnection() {
         viewModelScope.launch {
             _apiVerificationState.value = ApiVerificationState.Verifying

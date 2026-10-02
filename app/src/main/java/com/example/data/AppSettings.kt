@@ -103,5 +103,6 @@ data class AppSettings(
     val floatingButtonSizeDp: Int = 58,
     val floatingButtonOpacity: Float = 0.92f,
     val vibrationEnabled: Boolean = true,
-    val onboardingAcknowledged: Boolean = false
+    val onboardingAcknowledged: Boolean = false,
+    val customApiKey: String = ""
 )

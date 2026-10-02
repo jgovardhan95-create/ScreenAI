@@ -24,6 +24,7 @@ class SettingsRepository(private val context: Context) {
         val BUTTON_OPACITY = floatPreferencesKey("floating_button_opacity")
         val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         val ONBOARDING_ACK = booleanPreferencesKey("onboarding_acknowledged")
+        val CUSTOM_API_KEY = stringPreferencesKey("custom_gemini_api_key")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -34,6 +35,7 @@ class SettingsRepository(private val context: Context) {
         val opacity = (prefs[Keys.BUTTON_OPACITY] ?: 0.92f).coerceIn(0.35f, 1.0f)
         val vibration = prefs[Keys.VIBRATION_ENABLED] ?: true
         val onboardingAck = prefs[Keys.ONBOARDING_ACK] ?: false
+        val customApiKey = prefs[Keys.CUSTOM_API_KEY]?.trim().orEmpty()
 
         AppSettings(
             modelOption = GeminiModelOption.fromId(modelId),
@@ -42,7 +44,8 @@ class SettingsRepository(private val context: Context) {
             floatingButtonSizeDp = sizeDp,
             floatingButtonOpacity = opacity,
             vibrationEnabled = vibration,
-            onboardingAcknowledged = onboardingAck
+            onboardingAcknowledged = onboardingAck,
+            customApiKey = customApiKey
         )
     }
 
@@ -72,6 +75,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOnboardingAcknowledged(acknowledged: Boolean) {
         context.dataStore.edit { it[Keys.ONBOARDING_ACK] = acknowledged }
+    }
+
+    suspend fun setCustomApiKey(apiKey: String) {
+        context.dataStore.edit { it[Keys.CUSTOM_API_KEY] = apiKey.trim() }
     }
 
     companion object {

@@ -230,6 +230,7 @@ class MainActivity : ComponentActivity() {
                                 onVerifyApiConnection = { viewModel.verifyGeminiConnection() },
                                 onClearTemporaryData = { viewModel.clearAllTemporaryData() },
                                 onNavigateBack = { viewModel.navigateTo(AppDestination.HOME) },
+                                onSaveCustomApiKey = { viewModel.saveCustomApiKey(it) },
                                 modifier = Modifier.padding(innerPadding)
                             )
                         }
