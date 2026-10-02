@@ -24,16 +24,14 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Accept Android SDK Licenses
-        run: yes | sdkmanager --licenses || true
+        run: |
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          fi
 
-      - name: Setup Gradle 9.3.1
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
 
       - name: Create .env from GitHub Secrets (Secrets Gradle Plugin)
         env:
@@ -51,15 +49,14 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ ! -f "debug.keystore" ]; then
-            keytool -genkeypair -v \
-              -keystore debug.keystore \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          rm -f debug.keystore my-upload-key.jks
+          keytool -genkeypair -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
 
           if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
             echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
@@ -81,7 +78,7 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'androidrelease' }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'androidrelease' }}
         run: |
-          gradle :app:assembleDebug :app:assembleRelease --no-daemon
+          gradle :app:assembleDebug :app:assembleRelease --no-configuration-cache --no-daemon -x lint -x lintVitalRelease
           cp app/build/outputs/apk/release/app-release.apk ScreenAI-Assistant-release.apk
           cp app/build/outputs/apk/debug/app-debug.apk ScreenAI-Assistant-debug.apk
 
@@ -105,7 +102,7 @@ jobs:
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: "ScreenAI Assistant APK (Build #${{ github.run_number }})"
-          body: "Direct `.apk` downloads for ScreenAI Assistant. Click `ScreenAI-Assistant-release.apk` or `ScreenAI-Assistant-debug.apk` below under **Assets** to download and install on your Android phone."
+          body: "Direct `.apk` downloads for ScreenAI Assistant. Tap `ScreenAI-Assistant-release.apk` or `ScreenAI-Assistant-debug.apk` below under **Assets** to install on your Android device."
           files: |
             ScreenAI-Assistant-release.apk
             ScreenAI-Assistant-debug.apk
