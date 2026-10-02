@@ -1,0 +1,6 @@
+{
+  "name": "ScreenAI Assistant",
+  "description": "An AI-powered floating assistant that captures and understands your screen on demand using Gemini vision models.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
