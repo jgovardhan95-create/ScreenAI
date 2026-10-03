@@ -14,6 +14,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,13 +39,19 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.School
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -106,6 +114,8 @@ fun AiAutomationBrowserScreen(
     var detectedCourseName by remember { mutableStateOf<String?>(null) }
     var isExecutingAction by remember { mutableStateOf(false) }
     var isPanelExpanded by remember { mutableStateOf(true) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val context = LocalContext.current
 
     BackHandler {
         if (webViewInstance?.canGoBack() == true) {
@@ -379,281 +389,332 @@ fun AiAutomationBrowserScreen(
                     .testTag("in_app_webview")
             )
 
-            // 4. Floating AI Automation Panel (Overlay inside browser)
+            // 4. Floatable & Draggable AI Automation Panel (Overlay inside browser)
             Box(
                 contentAlignment = Alignment.BottomCenter,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp)
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
             ) {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
-                    ),
-                    border = BorderStroke(
-                        width = 1.2.dp,
-                        brush = Brush.horizontalGradient(
-                            listOf(NeonCyan.copy(alpha = 0.7f), ElectricViolet.copy(alpha = 0.7f))
-                        )
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("browser_ai_automation_card")
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        // Header with Toggle
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(CircleShape)
-                                        .background(NeonCyan.copy(alpha = 0.2f))
-                                ) {
-                                    Text(text = "⚡", fontSize = 14.sp)
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = "AI DOM Automation Runner",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = NeonCyan
-                                    )
-                                    Text(
-                                        text = "Direct webpage script injection & data extraction",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                if (!isPanelExpanded) {
+                    // Minimized compact floating pill
+                    Surface(
+                        onClick = { isPanelExpanded = true },
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFF0F172A).copy(alpha = 0.95f),
+                        border = BorderStroke(1.2.dp, NeonCyan.copy(alpha = 0.8f)),
+                        modifier = Modifier
+                            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+                            .pointerInput(Unit) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    dragOffsetY = (dragOffsetY + dragAmount.y).coerceIn(-500f, 40f)
                                 }
                             }
-
-                            IconButton(
-                                onClick = { isPanelExpanded = !isPanelExpanded },
-                                modifier = Modifier.size(32.dp)
+                            .testTag("browser_floating_minimized_pill")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DragHandle,
+                                contentDescription = "Drag Handle",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("⚡", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isExecutingAction) "Running Automation..." else "AI Runner: $automationQuery",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = NeonCyan
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                             ) {
-                                Icon(
-                                    imageVector = if (isPanelExpanded) Icons.Default.Close else Icons.Default.AutoAwesome,
-                                    contentDescription = "Toggle Panel",
-                                    tint = NeonCyan,
-                                    modifier = Modifier.size(16.dp)
+                                Text(
+                                    text = "Expand ▴",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         }
-
-                        AnimatedVisibility(visible = isPanelExpanded) {
-                            Column(modifier = Modifier.padding(top = 10.dp)) {
-                                // Detected Course Badge
-                                if (detectedCourseName != null) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = EmeraldPulse.copy(alpha = 0.14f),
-                                        border = BorderStroke(1.dp, EmeraldPulse.copy(alpha = 0.45f)),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.School,
-                                                contentDescription = null,
-                                                tint = EmeraldPulse,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Detected Course: $detectedCourseName",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = EmeraldPulse,
-                                                fontWeight = FontWeight.Bold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                    }
+                } else {
+                    // Full Floatable AI Automation Card
+                    Card(
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
+                        ),
+                        border = BorderStroke(
+                            width = 1.5.dp,
+                            brush = Brush.horizontalGradient(
+                                listOf(NeonCyan.copy(alpha = 0.85f), ElectricViolet.copy(alpha = 0.85f))
+                            )
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                        modifier = Modifier
+                            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+                            .fillMaxWidth()
+                            .testTag("browser_ai_automation_card")
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            // Drag Handle Bar at top
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .pointerInput(Unit) {
+                                        detectDragGestures { change, dragAmount ->
+                                            change.consume()
+                                            dragOffsetY = (dragOffsetY + dragAmount.y).coerceIn(-480f, 40f)
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    .padding(bottom = 6.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier
+                                        .width(44.dp)
+                                        .height(5.dp)
+                                ) {}
+                            }
+
+                            // Header with Draggable indicator & Minimize button
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(NeonCyan.copy(alpha = 0.2f))
+                                    ) {
+                                        Text(text = "⚡", fontSize = 15.sp)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "AI DOM Automation Runner",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NeonCyan
+                                        )
+                                        Text(
+                                            text = "Drag anywhere • Works in background with notification",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
 
-                                // Input box for search / topic
-                                OutlinedTextField(
-                                    value = automationQuery,
-                                    onValueChange = { automationQuery = it },
-                                    placeholder = {
-                                        Text(
-                                            "e.g., Spring 5 Basics, Java, Microservices...",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    },
-                                    singleLine = true,
-                                    textStyle = MaterialTheme.typography.bodySmall,
+                                IconButton(
+                                    onClick = { isPanelExpanded = false },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Minimize Runner",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Detected Course Badge
+                            if (detectedCourseName != null) {
+                                Surface(
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp)
-                                        .testTag("browser_automation_query_input")
-                                )
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                // Automation Action Buttons
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    color = EmeraldPulse.copy(alpha = 0.16f),
+                                    border = BorderStroke(1.dp, EmeraldPulse.copy(alpha = 0.5f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    // Button 1: Auto Search & Fill
-                                    Button(
-                                        onClick = {
-                                            val wv = webViewInstance ?: return@Button
-                                            isExecutingAction = true
-                                            automationStatus = "Searching topic: $automationQuery..."
-                                            AiWebAutomationController.performAutoSearch(wv, automationQuery) { success, msg ->
-                                                isExecutingAction = false
-                                                automationStatus = msg
-                                            }
-                                        },
-                                        enabled = !isExecutingAction && automationQuery.isNotBlank(),
-                                        shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                        modifier = Modifier.height(34.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Search,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Auto Search Topic", style = MaterialTheme.typography.labelSmall)
-                                    }
-
-                                    // Button 2: Extract Course Name
-                                    FilledTonalButton(
-                                        onClick = {
-                                            val wv = webViewInstance ?: return@FilledTonalButton
-                                            isExecutingAction = true
-                                            automationStatus = "Extracting course from page..."
-                                            AiWebAutomationController.extractCourseInfo(wv) { success, title ->
-                                                isExecutingAction = false
-                                                if (success) {
-                                                    detectedCourseName = title
-                                                    automationStatus = "Course Found: $title"
-                                                } else {
-                                                    automationStatus = title
-                                                }
-                                            }
-                                        },
-                                        enabled = !isExecutingAction,
-                                        shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                        modifier = Modifier.height(34.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.School,
                                             contentDescription = null,
-                                            modifier = Modifier.size(14.dp)
+                                            tint = EmeraldPulse,
+                                            modifier = Modifier.size(16.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Extract Course Name", style = MaterialTheme.typography.labelSmall)
-                                    }
-
-                                    // Button 3: Auto-Next Module
-                                    OutlinedButton(
-                                        onClick = {
-                                            val wv = webViewInstance ?: return@OutlinedButton
-                                            isExecutingAction = true
-                                            automationStatus = "Clicking Next / Continue..."
-                                            AiWebAutomationController.clickNextOrContinue(wv) { success, msg ->
-                                                isExecutingAction = false
-                                                automationStatus = msg
-                                            }
-                                        },
-                                        enabled = !isExecutingAction,
-                                        shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                        modifier = Modifier.height(34.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.FastForward,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Course: $detectedCourseName",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = EmeraldPulse,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Next / Continue", style = MaterialTheme.typography.labelSmall)
-                                    }
-
-                                    // Button 4: Filter Keyword
-                                    OutlinedButton(
-                                        onClick = {
-                                            val wv = webViewInstance ?: return@OutlinedButton
-                                            isExecutingAction = true
-                                            automationStatus = "Filtering for: $automationQuery..."
-                                            AiWebAutomationController.filterOrSelectCourse(wv, automationQuery) { success, msg ->
-                                                isExecutingAction = false
-                                                automationStatus = msg
-                                            }
-                                        },
-                                        enabled = !isExecutingAction && automationQuery.isNotBlank(),
-                                        shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                        modifier = Modifier.height(34.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.FilterList,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Select Course", style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
 
-                                // Status Banner
-                                if (automationStatus != null) {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                            // Command Input field
+                            OutlinedTextField(
+                                value = automationQuery,
+                                onValueChange = { automationQuery = it },
+                                placeholder = {
+                                    Text(
+                                        "e.g., filter select course Spring 5, or open topic and complete course...",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("browser_automation_query_input")
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Suggestion chips
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                val suggestions = listOf(
+                                    "🎯 filter and select course Spring 5",
+                                    "🚀 open Spring 5 topic and complete course",
+                                    "📋 extract course name"
+                                )
+                                suggestions.forEach { suggestion ->
+                                    val cleanText = suggestion.substring(2).trim()
                                     Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
-                                        modifier = Modifier.fillMaxWidth()
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.clickable {
+                                            automationQuery = cleanText
+                                        }
                                     ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                        ) {
-                                            if (isExecutingAction) {
-                                                CircularProgressIndicator(
-                                                    strokeWidth = 2.dp,
-                                                    color = NeonCyan,
-                                                    modifier = Modifier.size(12.dp)
-                                                )
-                                            } else {
-                                                Icon(
-                                                    imageVector = Icons.Default.CheckCircle,
-                                                    contentDescription = null,
-                                                    tint = EmeraldPulse,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = automationStatus!!,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
+                                        Text(
+                                            text = suggestion,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // The ONLY action button: [⚡ RUN]
+                            Button(
+                                onClick = {
+                                    val wv = webViewInstance ?: return@Button
+                                    isExecutingAction = true
+                                    automationStatus = "Starting autonomous flow..."
+                                    AiWebAutomationController.executeAutonomousCourseFlow(
+                                        context = context,
+                                        webView = wv,
+                                        userInstruction = automationQuery
+                                    ) { status, isFinished, courseName ->
+                                        automationStatus = status
+                                        if (courseName != null) {
+                                            detectedCourseName = courseName
+                                        }
+                                        if (isFinished) {
+                                            isExecutingAction = false
+                                        }
+                                    }
+                                },
+                                enabled = !isExecutingAction && automationQuery.isNotBlank(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("run_autonomous_flow_button")
+                            ) {
+                                if (isExecutingAction) {
+                                    CircularProgressIndicator(
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Running Flow & Notifying on Complete...", fontWeight = FontWeight.Bold)
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("⚡ RUN", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                                }
+                            }
+
+                            // Live Status Progress Banner
+                            if (automationStatus != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (automationStatus!!.startsWith("✅")) {
+                                        EmeraldPulse.copy(alpha = 0.16f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                                    },
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (automationStatus!!.startsWith("✅")) EmeraldPulse.copy(alpha = 0.5f)
+                                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                    ) {
+                                        if (isExecutingAction) {
+                                            CircularProgressIndicator(
+                                                strokeWidth = 2.dp,
+                                                color = NeonCyan,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = EmeraldPulse,
+                                                modifier = Modifier.size(16.dp)
                                             )
                                         }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = automationStatus!!,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 3,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                             }

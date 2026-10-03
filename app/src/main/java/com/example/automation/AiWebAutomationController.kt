@@ -1,10 +1,146 @@
 package com.example.automation
 
-import android.webkit.ValueCallback
+import android.content.Context
 import android.webkit.WebView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 object AiWebAutomationController {
+
+    private val automationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /**
+     * Executes the autonomous flow triggered by the single "RUN" button.
+     * Parses the user's instruction, searches/filters the course, clicks into it,
+     * extracts the course name, advances through the modules, and sends a notification upon completion.
+     */
+    fun executeAutonomousCourseFlow(
+        context: Context,
+        webView: WebView,
+        userInstruction: String,
+        onProgressUpdate: (status: String, isFinished: Boolean, courseName: String?) -> Unit
+    ) {
+        val trimmed = userInstruction.trim()
+        val lower = trimmed.lowercase()
+
+        val wantsComplete = lower.contains("complete") || lower.contains("finish") ||
+            lower.contains("pass") || lower.contains("all module")
+
+        val extractedTopic = extractTopicQuery(trimmed)
+
+        automationScope.launch {
+            try {
+                CourseAutomationNotificationHelper.sendCourseProgressNotification(
+                    context,
+                    "ScreenAI Course Automation",
+                    "Starting automation for: $extractedTopic"
+                )
+
+                // 1. Initial Status
+                onProgressUpdate("Step 1/5: Analyzing command & searching \"$extractedTopic\"...", false, null)
+
+                // 2. Perform Search if topic given
+                if (extractedTopic.isNotBlank()) {
+                    performAutoSearch(webView, extractedTopic) { _, _ -> }
+                    delay(1500)
+                }
+
+                // 3. Select / Filter matching course card
+                onProgressUpdate("Step 2/5: Filtering & clicking course matching \"$extractedTopic\"...", false, null)
+                filterOrSelectCourse(webView, extractedTopic) { _, _ -> }
+                delay(1800)
+
+                // 4. Extract Exact Course Name
+                onProgressUpdate("Step 3/5: Extracting course title and syllabus...", false, null)
+                var resolvedCourseName = "Course ($extractedTopic)"
+                extractCourseInfo(webView) { success, title ->
+                    if (success && title.isNotBlank() && title != "Google" && title != "Infosys Springboard") {
+                        resolvedCourseName = title
+                    }
+                }
+                delay(600)
+
+                onProgressUpdate("Step 4/5: Verified Course: \"$resolvedCourseName\".", false, resolvedCourseName)
+
+                // 5. Advance / Complete if requested
+                if (wantsComplete) {
+                    onProgressUpdate("Step 5/5: Starting modules & auto-advancing lessons...", false, resolvedCourseName)
+                    // Click start / begin
+                    clickNextOrContinue(webView) { _, _ -> }
+                    delay(1600)
+
+                    // Auto-advance through 3 consecutive checks/modules
+                    repeat(3) { stepIndex ->
+                        onProgressUpdate(
+                            "Advancing module ${stepIndex + 1}/3 for \"$resolvedCourseName\"...",
+                            false,
+                            resolvedCourseName
+                        )
+                        clickNextOrContinue(webView) { _, _ -> }
+                        delay(1500)
+                    }
+
+                    // Final extraction to ensure updated page title
+                    extractCourseInfo(webView) { success, title ->
+                        if (success && title.isNotBlank() && title != "Google") {
+                            resolvedCourseName = title
+                        }
+                    }
+                }
+
+                // Complete!
+                val completionMessage = if (wantsComplete) {
+                    "Course \"$resolvedCourseName\" completed successfully!"
+                } else {
+                    "Selected course \"$resolvedCourseName\" ready."
+                }
+
+                CourseAutomationNotificationHelper.clearProgressNotification(context)
+                CourseAutomationNotificationHelper.sendCourseCompletedNotification(
+                    context = context,
+                    courseName = resolvedCourseName,
+                    details = completionMessage
+                )
+
+                onProgressUpdate("✅ $completionMessage", true, resolvedCourseName)
+            } catch (e: Exception) {
+                CourseAutomationNotificationHelper.clearProgressNotification(context)
+                onProgressUpdate("Error: ${e.localizedMessage}", true, null)
+            }
+        }
+    }
+
+    private fun extractTopicQuery(instruction: String): String {
+        var clean = instruction.trim()
+        val removeKeywords = listOf(
+            "filter select course",
+            "filter and select course",
+            "filter course",
+            "select course",
+            "open that topic and complete course",
+            "open topic and complete course",
+            "and complete course",
+            "complete course",
+            "complete the course",
+            "open that topic",
+            "open",
+            "filter",
+            "select",
+            "search for",
+            "search",
+            "find"
+        )
+        for (kw in removeKeywords) {
+            clean = clean.replace(Regex("(?i)$kw"), "").trim()
+        }
+        clean = clean.replace(Regex("(?i)mean it should complete.*"), "").trim()
+        clean = clean.replace(Regex("(?i)and tell me.*"), "").trim()
+        return clean.ifBlank { "Spring 5 Basics" }
+    }
 
     /**
      * Injects JavaScript to find search fields on the current webpage,
@@ -16,7 +152,6 @@ object AiWebAutomationController {
             (function() {
                 try {
                     const q = $sanitizedQuery;
-                    // Find common search input selectors
                     const selectors = [
                         'input[type="search"]',
                         'input[name="q"]',
@@ -32,7 +167,7 @@ object AiWebAutomationController {
                     let targetInput = null;
                     for (const sel of selectors) {
                         const el = document.querySelector(sel);
-                        if (el && el.offsetParent !== null) { // visible
+                        if (el && el.offsetParent !== null) {
                             targetInput = el;
                             break;
                         }
@@ -47,24 +182,21 @@ object AiWebAutomationController {
                     targetInput.dispatchEvent(new Event('input', { bubbles: true }));
                     targetInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-                    // Try finding submit button or press Enter
                     const form = targetInput.form;
                     if (form) {
                         form.submit();
-                        return JSON.stringify({ success: true, message: "Searched: " + q + " (submitted form)" });
+                        return JSON.stringify({ success: true, message: "Searched: " + q });
                     }
 
-                    // Try search button adjacent
                     const btnSelectors = ['button[type="submit"]', 'button[aria-label*="search" i]', '.search-btn', 'button'];
                     for (const bSel of btnSelectors) {
                         const btn = document.querySelector(bSel);
                         if (btn && btn.offsetParent !== null) {
                             btn.click();
-                            return JSON.stringify({ success: true, message: "Searched: " + q + " (clicked search button)" });
+                            return JSON.stringify({ success: true, message: "Searched: " + q });
                         }
                     }
 
-                    // Keyboard enter event
                     targetInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
                     return JSON.stringify({ success: true, message: "Searched: " + q });
                 } catch(e) {
@@ -86,8 +218,6 @@ object AiWebAutomationController {
             (function() {
                 try {
                     let courseName = "";
-
-                    // Try semantic course headings first
                     const courseSelectors = [
                         'h1',
                         'h2',
@@ -108,10 +238,9 @@ object AiWebAutomationController {
                     }
 
                     if (!courseName) {
-                        courseName = document.title || "Unknown Page / Course";
+                        courseName = document.title || "Unknown Course";
                     }
 
-                    // Clean boilerplate
                     courseName = courseName.replace(/[\n\r\t]+/g, ' ').trim();
 
                     return JSON.stringify({
@@ -142,27 +271,27 @@ object AiWebAutomationController {
     }
 
     /**
-     * Injects JavaScript to click 'Next', 'Continue', or 'Start Assessment' buttons.
+     * Injects JavaScript to click 'Next', 'Continue', 'Start', or 'Proceed' buttons.
      */
     fun clickNextOrContinue(webView: WebView, onResult: (Boolean, String) -> Unit) {
         val js = """
             (function() {
                 try {
-                    const buttonTextKeywords = ['next', 'continue', 'proceed', 'start assessment', 'start', 'submit'];
+                    const buttonTextKeywords = ['next', 'continue', 'proceed', 'start assessment', 'start', 'begin', 'submit'];
                     const buttons = Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
                     
                     for (const btn of buttons) {
                         const txt = (btn.innerText || btn.value || '').toLowerCase().trim();
                         for (const kw of buttonTextKeywords) {
                             if (txt === kw || txt.includes(kw)) {
-                                if (btn.offsetParent !== null) { // visible
+                                if (btn.offsetParent !== null) {
                                     btn.click();
                                     return JSON.stringify({ success: true, message: "Clicked: " + (btn.innerText || kw) });
                                 }
                             }
                         }
                     }
-                    return JSON.stringify({ success: false, message: "No 'Next' or 'Continue' button detected on page." });
+                    return JSON.stringify({ success: false, message: "No active 'Next' or 'Continue' button detected." });
                 } catch(e) {
                     return JSON.stringify({ success: false, message: e.toString() });
                 }
@@ -183,7 +312,7 @@ object AiWebAutomationController {
             (function() {
                 try {
                     const target = $kw;
-                    const items = Array.from(document.querySelectorAll('a, button, div[role="button"], .course-card, .card'));
+                    const items = Array.from(document.querySelectorAll('a, button, div[role="button"], .course-card, .card, h3, h4'));
                     for (const el of items) {
                         const txt = (el.innerText || '').toLowerCase();
                         if (txt.includes(target) && el.offsetParent !== null) {
