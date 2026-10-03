@@ -96,6 +96,8 @@ fun HomeScreen(
     onRequestNotificationPermission: () -> Unit,
     onOpenOnboardingGuide: () -> Unit,
     onOpenTestScreenAi: () -> Unit,
+    onOpenWorkInOneTime: () -> Unit,
+    onOpenAiBrowser: (String) -> Unit = {},
     onOpenSettings: () -> Unit,
     onDeleteHistoryItem: (Int) -> Unit,
     onShowBanner: (String) -> Unit,
@@ -155,7 +157,20 @@ fun HomeScreen(
                 )
             }
 
-            // 3. Required Android Permissions Readiness Card
+            // 3. Work in One Time Feature Highlight Card
+            item {
+                WorkInOneTimePromoCard(onOpen = onOpenWorkInOneTime)
+            }
+
+            // 4. In-App AI Automation Browser Promo Card
+            item {
+                AiAutomationBrowserPromoCard(
+                    onOpenInfosys = { onOpenAiBrowser("https://infy.onwingspan.com") },
+                    onOpenGeneric = { onOpenAiBrowser("https://www.google.com") }
+                )
+            }
+
+            // 5. Required Android Permissions Readiness Card
             item {
                 PermissionsChecklistCard(
                     hasOverlayPermission = hasOverlayPermission,
@@ -837,3 +852,205 @@ private fun HistoryItemCard(
         }
     }
 }
+
+@Composable
+private fun WorkInOneTimePromoCard(onOpen: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF0F172A)
+        ),
+        border = BorderStroke(
+            width = 1.5.dp,
+            brush = Brush.horizontalGradient(
+                listOf(NeonCyan.copy(alpha = 0.85f), ElectricViolet.copy(alpha = 0.85f))
+            )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("work_in_one_time_promo_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(NeonCyan.copy(alpha = 0.2f))
+                    ) {
+                        Text(text = "⚡", style = MaterialTheme.typography.titleMedium)
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Work in One Time",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = NeonCyan
+                        )
+                        Text(
+                            text = "Autonomous Background Action Flow",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = EmeraldPulse.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, EmeraldPulse.copy(alpha = 0.5f))
+                ) {
+                    Text(
+                        text = "NEW",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = EmeraldPulse,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Enter any task in plain text (e.g. 'open browser and download movie', 'find coffee shops', 'open wifi settings'). ScreenAI plans the steps, executes them in the background, and displays the full live execution flow.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+            Button(
+                onClick = onOpen,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                ),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("open_work_in_one_time_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Open Task Runner Flow ➔", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiAutomationBrowserPromoCard(
+    onOpenInfosys: () -> Unit,
+    onOpenGeneric: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF0A192F)
+        ),
+        border = BorderStroke(
+            width = 1.5.dp,
+            brush = Brush.horizontalGradient(
+                listOf(NeonCyan.copy(alpha = 0.9f), EmeraldPulse.copy(alpha = 0.7f))
+            )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("ai_automation_browser_promo_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(EmeraldPulse.copy(alpha = 0.2f))
+                    ) {
+                        Text(text = "🌐", style = MaterialTheme.typography.titleMedium)
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "AI Automation Browser",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldPulse
+                        )
+                        Text(
+                            text = "In-App Web Runner • DOM Automation",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = NeonCyan.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
+                ) {
+                    Text(
+                        text = "NEW",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NeonCyan,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Runs directly inside the app with persistent logins! Automate course searches on Infosys Wingspan, inject scripts to filter topics, and extract exact course titles.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Button(
+                    onClick = onOpenInfosys,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("open_infosys_browser_button")
+                ) {
+                    Text("🏢 Open Infosys Wingspan", fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = onOpenGeneric,
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text("Open Browser")
+                }
+            }
+        }
+    }
+}
+
+

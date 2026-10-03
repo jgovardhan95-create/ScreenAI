@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.example.automation.TaskAutomationManager
 import com.example.capture.CaptureOutcome
 import com.example.capture.ScreenCaptureManager
 import com.example.data.AiMode
@@ -214,7 +215,7 @@ object OverlayStateController {
                 it.copy(
                     displayState = OverlayDisplayState.EXPANDED_PANEL,
                     activeMode = mode,
-                    isAskInputExpanded = mode == AiMode.ASK_AI && customQuery.isNullOrBlank() && it.customAskText.isBlank(),
+                    isAskInputExpanded = (mode == AiMode.ASK_AI || mode == AiMode.WORK_IN_ONE_TIME) && customQuery.isNullOrBlank() && it.customAskText.isBlank(),
                     errorTitle = null,
                     errorMessage = null,
                     feedbackBanner = null,
@@ -222,9 +223,9 @@ object OverlayStateController {
                 )
             }
 
-            // If user tapped Ask AI without providing a query yet, let them type or choose a chip first
+            // If user tapped Ask AI or Work in One Time without providing a query yet, let them type first
             val resolvedQuery = (customQuery ?: _uiState.value.customAskText).trim()
-            if (mode == AiMode.ASK_AI && resolvedQuery.isEmpty()) {
+            if ((mode == AiMode.ASK_AI || mode == AiMode.WORK_IN_ONE_TIME) && resolvedQuery.isEmpty()) {
                 onRequestWindowFocusable?.invoke(true)
                 _uiState.update {
                     it.copy(
@@ -233,6 +234,10 @@ object OverlayStateController {
                     )
                 }
                 return@launch
+            }
+
+            if (mode == AiMode.WORK_IN_ONE_TIME && resolvedQuery.isNotEmpty()) {
+                TaskAutomationManager.runTask(appContext, resolvedQuery)
             }
 
             // Step 1: Acquire or reuse screen image

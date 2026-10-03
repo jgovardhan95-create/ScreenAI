@@ -5,6 +5,7 @@
     <string name="btn_start_assistant">Start Floating Assistant</string>
     <string name="btn_stop_assistant">Stop Floating Assistant</string>
     <string name="btn_test_screen_ai">Test Screen AI</string>
+    <string name="btn_work_in_one_time">Work in One Time</string>
     <string name="btn_settings">Settings</string>
     <string name="onboarding_title">How ScreenAI Works</string>
     <string name="onboarding_step_1_title">Floating Overlay Assistant</string>

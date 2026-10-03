@@ -35,6 +35,12 @@ enum class AiMode(
         emoji = "💡",
         title = "Ask AI",
         shortDescription = "Type a custom instruction about the screen"
+    ),
+    WORK_IN_ONE_TIME(
+        id = "work_in_one_time",
+        emoji = "⚡",
+        title = "Work 1-Time",
+        shortDescription = "Autonomous action runner (open browser, search, apps)"
     )
 }
 

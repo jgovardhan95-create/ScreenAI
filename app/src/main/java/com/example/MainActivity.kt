@@ -35,10 +35,12 @@ import com.example.service.FloatingOverlayService
 import com.example.service.OverlayStateController
 import com.example.ui.AppDestination
 import com.example.ui.MainViewModel
+import com.example.ui.screens.AiAutomationBrowserScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.TestScreenAiScreen
+import com.example.ui.screens.WorkInOneTimeScreen
 import com.example.ui.theme.ScreenAITheme
 
 class MainActivity : ComponentActivity() {
@@ -107,6 +109,9 @@ class MainActivity : ComponentActivity() {
             val destination by viewModel.currentDestination.collectAsStateWithLifecycle()
             val apiVerificationState by viewModel.apiVerificationState.collectAsStateWithLifecycle()
             val statusBanner by viewModel.statusBanner.collectAsStateWithLifecycle()
+            val currentAutomationTask by viewModel.currentAutomationTask.collectAsStateWithLifecycle()
+            val automationHistory by viewModel.automationHistory.collectAsStateWithLifecycle()
+            val browserInitialUrl by viewModel.browserInitialUrl.collectAsStateWithLifecycle()
 
             var hasOverlayPerm by remember { mutableStateOf(Settings.canDrawOverlays(this)) }
             var hasNotifPerm by remember { mutableStateOf(checkNotificationPermission()) }
@@ -192,6 +197,12 @@ class MainActivity : ComponentActivity() {
                                 onOpenTestScreenAi = {
                                     viewModel.navigateTo(AppDestination.TEST_SCREEN_AI)
                                 },
+                                onOpenWorkInOneTime = {
+                                    viewModel.navigateTo(AppDestination.WORK_IN_ONE_TIME)
+                                },
+                                onOpenAiBrowser = { url ->
+                                    viewModel.openAiBrowser(url)
+                                },
                                 onOpenSettings = {
                                     viewModel.navigateTo(AppDestination.SETTINGS)
                                 },
@@ -201,6 +212,28 @@ class MainActivity : ComponentActivity() {
                                 onShowBanner = { msg ->
                                     viewModel.showTemporaryBanner(msg)
                                 },
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        }
+
+                        AppDestination.WORK_IN_ONE_TIME -> {
+                            WorkInOneTimeScreen(
+                                currentTask = currentAutomationTask,
+                                taskHistory = automationHistory,
+                                onRunTask = { viewModel.runAutomationTask(it) },
+                                onReRunTask = { viewModel.reRunAutomationTask(it) },
+                                onClearCurrentTask = { viewModel.clearCurrentAutomationTask() },
+                                onClearHistory = { viewModel.clearAutomationHistory() },
+                                onOpenInAiBrowser = { url -> viewModel.openAiBrowser(url) },
+                                onNavigateBack = { viewModel.navigateTo(AppDestination.HOME) },
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        }
+
+                        AppDestination.AI_BROWSER -> {
+                            AiAutomationBrowserScreen(
+                                initialUrl = browserInitialUrl,
+                                onNavigateBack = { viewModel.navigateTo(AppDestination.HOME) },
                                 modifier = Modifier.padding(innerPadding)
                             )
                         }

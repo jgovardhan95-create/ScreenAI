@@ -3,6 +3,8 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.automation.AutomationTask
+import com.example.automation.TaskAutomationManager
 import com.example.capture.ScreenCaptureManager
 import com.example.data.AnalysisHistoryItem
 import com.example.data.AppSettings
@@ -26,6 +28,8 @@ import kotlinx.coroutines.launch
 enum class AppDestination {
     ONBOARDING,
     HOME,
+    WORK_IN_ONE_TIME,
+    AI_BROWSER,
     TEST_SCREEN_AI,
     SETTINGS
 }
@@ -57,6 +61,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val overlayState: StateFlow<OverlayUiState> = OverlayStateController.uiState
     val hasProjectionPermission: StateFlow<Boolean> = ScreenCaptureManager.hasProjectionPermission
 
+    val currentAutomationTask: StateFlow<AutomationTask?> = TaskAutomationManager.currentTask
+    val automationHistory: StateFlow<List<AutomationTask>> = TaskAutomationManager.taskHistory
+
     private val _currentDestination = MutableStateFlow(AppDestination.HOME)
     val currentDestination: StateFlow<AppDestination> = _currentDestination.asStateFlow()
 
@@ -65,6 +72,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _statusBanner = MutableStateFlow<String?>(null)
     val statusBanner: StateFlow<String?> = _statusBanner.asStateFlow()
+
+    private val _browserInitialUrl = MutableStateFlow("https://infy.onwingspan.com")
+    val browserInitialUrl: StateFlow<String> = _browserInitialUrl.asStateFlow()
+
+    fun openAiBrowser(url: String = "https://infy.onwingspan.com") {
+        _browserInitialUrl.value = url
+        _currentDestination.value = AppDestination.AI_BROWSER
+    }
 
     fun navigateTo(destination: AppDestination) {
         _currentDestination.value = destination
@@ -133,6 +148,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _apiVerificationState.value = ApiVerificationState.Idle
             }
         }
+    }
+
+    fun runAutomationTask(command: String) {
+        TaskAutomationManager.runTask(getApplication(), command)
+    }
+
+    fun reRunAutomationTask(task: AutomationTask) {
+        TaskAutomationManager.reRunTask(getApplication(), task)
+    }
+
+    fun clearCurrentAutomationTask() {
+        TaskAutomationManager.clearCurrentTask()
+    }
+
+    fun clearAutomationHistory() {
+        TaskAutomationManager.clearHistory()
     }
 
     fun verifyGeminiConnection() {

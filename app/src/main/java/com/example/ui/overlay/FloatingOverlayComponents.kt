@@ -519,19 +519,31 @@ fun FloatingAiPanelCard(
                 }
             }
 
-            // 3. Ask AI Custom Instruction Input & Quick Suggestion Chips
+            // 3. Ask AI / Work in One Time Custom Instruction Input & Quick Suggestion Chips
             AnimatedVisibility(
-                visible = uiState.activeMode == AiMode.ASK_AI && uiState.isAskInputExpanded,
+                visible = (uiState.activeMode == AiMode.ASK_AI || uiState.activeMode == AiMode.WORK_IN_ONE_TIME) && uiState.isAskInputExpanded,
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
+                val isWorkInOneTime = uiState.activeMode == AiMode.WORK_IN_ONE_TIME
+                val suggestionList = if (isWorkInOneTime) {
+                    listOf(
+                        "🌐 Open browser and search movie to download",
+                        "🎬 Open YouTube & play lofi",
+                        "🗺️ Find coffee shops near me",
+                        "⚙️ Open WiFi settings"
+                    )
+                } else {
+                    PromptGenerator.quickAskSuggestions
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp)
                 ) {
                     Text(
-                        text = "Quick prompts or type your own:",
+                        text = if (isWorkInOneTime) "Choose task or type command:" else "Quick prompts or type your own:",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -541,11 +553,16 @@ fun FloatingAiPanelCard(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        PromptGenerator.quickAskSuggestions.forEach { suggestion ->
+                        suggestionList.forEach { suggestion ->
+                            val cleanQuery = if (isWorkInOneTime && suggestion.length > 2) {
+                                suggestion.substring(2).trim()
+                            } else {
+                                suggestion
+                            }
                             Surface(
                                 onClick = {
-                                    onCustomQueryChange(suggestion)
-                                    onSubmitCustomQuery(suggestion)
+                                    onCustomQueryChange(cleanQuery)
+                                    onSubmitCustomQuery(cleanQuery)
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
@@ -574,7 +591,7 @@ fun FloatingAiPanelCard(
                             onValueChange = onCustomQueryChange,
                             placeholder = {
                                 Text(
-                                    "e.g., Find the error in this code...",
+                                    if (isWorkInOneTime) "e.g., Open browser and download movie..." else "e.g., Find the error in this code...",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             },

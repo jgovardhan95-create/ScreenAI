@@ -77,6 +77,20 @@ Fulfill the user's instruction directly and accurately based on the visual and t
 $lengthNote
                 """.trimIndent()
             }
+
+            AiMode.WORK_IN_ONE_TIME -> {
+                val task = customInstruction?.trim().takeUnless { it.isNullOrEmpty() }
+                    ?: "Analyze the task on screen, plan the background actions, and state the execution flow."
+                """
+MODE: ⚡ WORK IN ONE TIME (Autonomous Action Flow)
+User's background task instruction:
+"$task"
+
+1. Identify the requested action (e.g. search web, open browser, download, navigate, open settings).
+2. Detail the exact sequential steps to fulfill this task.
+3. Provide the direct links or commands needed to complete it.
+                """.trimIndent()
+            }
         }
     }
 
