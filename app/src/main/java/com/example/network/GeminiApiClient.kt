@@ -461,4 +461,68 @@ object GeminiApiClient {
 
             mapExceptionToGeminiError(lastException, apiKey)
         }
+
+    suspend fun generateText(
+        context: Context,
+        prompt: String,
+        systemInstruction: String = ""
+    ): GeminiResult = withContext(Dispatchers.IO) {
+        if (!isInternetAvailable(context)) {
+            return@withContext GeminiResult.Error(
+                title = "Internet Unavailable",
+                message = "No active internet connection.",
+                errorType = GeminiErrorType.NO_INTERNET
+            )
+        }
+
+        val savedCustomKey = runCatching {
+            SettingsRepository.getInstance(context.applicationContext).settingsFlow.first().customApiKey
+        }.getOrDefault("")
+        val apiKey = resolveActiveApiKey(savedCustomKey)
+
+        val modelsToTry = listOf("gemini-2.5-flash", "gemini-flash-latest", "gemini-3.5-flash")
+        for (modelId in modelsToTry) {
+            try {
+                if (apiKey.isEmpty() && isFirebaseAiConfigured(context)) {
+                    val model = Firebase.ai(backend = GenerativeBackend.googleAI())
+                        .generativeModel(
+                            modelName = modelId,
+                            systemInstruction = if (systemInstruction.isNotBlank()) content { text(systemInstruction) } else null
+                        )
+                    val resp = model.generateContent(prompt).text
+                    if (!resp.isNullOrBlank()) {
+                        return@withContext GeminiResult.Success(resp, modelId)
+                    }
+                }
+
+                if (apiKey.isNotEmpty()) {
+                    val request = GenerateContentRequest(
+                        contents = listOf(
+                            Content(
+                                role = "user",
+                                parts = listOf(Part(text = prompt))
+                            )
+                        ),
+                        systemInstruction = if (systemInstruction.isNotBlank()) Content(
+                            parts = listOf(Part(text = systemInstruction))
+                        ) else null,
+                        generationConfig = GenerationConfig(temperature = 0.2f, maxOutputTokens = 1024)
+                    )
+                    val response = service.generateContent(modelId, apiKey, request)
+                    val reply = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                    if (!reply.isNullOrBlank()) {
+                        return@withContext GeminiResult.Success(reply.trim(), modelId)
+                    }
+                }
+            } catch (_: Exception) {
+                // Try next model
+            }
+        }
+
+        return@withContext GeminiResult.Error(
+            "Generation Failed",
+            "Could not generate text with Gemini.",
+            GeminiErrorType.API_FAILURE
+        )
+    }
 }
