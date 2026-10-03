@@ -17,4 +17,5 @@
     <string name="notification_channel_name">ScreenAI Floating Overlay</string>
     <string name="notification_title">ScreenAI Assistant Active</string>
     <string name="notification_text">Tap the floating AI button anytime to analyze your screen.</string>
+    <string name="accessibility_service_description">Simulates clicks, text input, and page navigation for ScreenAI Browser Automation Engine.</string>
 </resources>

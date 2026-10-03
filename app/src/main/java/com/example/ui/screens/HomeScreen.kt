@@ -36,22 +36,35 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.ScreenshotMonitor
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.automation.AiWorkerBrowserManager
+import com.example.automation.WorkerPhase
+import com.example.automation.WorkerState
+import com.example.ui.components.FloatingAiWorkerWindow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -104,6 +117,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val workerState by AiWorkerBrowserManager.state.collectAsStateWithLifecycle()
 
     Box(
         contentAlignment = Alignment.TopCenter,
@@ -162,11 +176,16 @@ fun HomeScreen(
                 WorkInOneTimePromoCard(onOpen = onOpenWorkInOneTime)
             }
 
-            // 4. In-App AI Automation Browser Promo Card
+            // 4. AI Autonomous Task Worker Card (Home Core Feature)
             item {
-                AiAutomationBrowserPromoCard(
-                    onOpenInfosys = { onOpenAiBrowser("https://infy.onwingspan.com") },
-                    onOpenGeneric = { onOpenAiBrowser("https://www.google.com") }
+                AiAutonomousTaskWorkerHomeCard(
+                    workerState = workerState,
+                    onUpdateInstruction = { AiWorkerBrowserManager.updateInstruction(it) },
+                    onToggleTextInput = { AiWorkerBrowserManager.toggleTextInput() },
+                    onToggleView = { AiWorkerBrowserManager.toggleFloatingWindow() },
+                    onRunTask = {
+                        AiWorkerBrowserManager.runAutonomousTask(context = context)
+                    }
                 )
             }
 
@@ -221,6 +240,12 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(28.dp))
             }
         }
+
+        // Floating Worker Window (Toggled via "View" button on Home Card)
+        FloatingAiWorkerWindow(
+            workerState = workerState,
+            onClose = { AiWorkerBrowserManager.closeFloatingWindow() }
+        )
     }
 }
 
@@ -950,27 +975,37 @@ private fun WorkInOneTimePromoCard(onOpen: () -> Unit) {
 }
 
 @Composable
-private fun AiAutomationBrowserPromoCard(
-    onOpenInfosys: () -> Unit,
-    onOpenGeneric: () -> Unit
+private fun AiAutonomousTaskWorkerHomeCard(
+    workerState: WorkerState,
+    onUpdateInstruction: (String) -> Unit,
+    onToggleTextInput: () -> Unit,
+    onToggleView: () -> Unit,
+    onRunTask: () -> Unit
 ) {
+    val presetExample = "goto infosys springboard home page and goto search and enter Spring 5 Basics and add filter course and complete on task"
+
     Card(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(26.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF0A192F)
         ),
         border = BorderStroke(
             width = 1.5.dp,
             brush = Brush.horizontalGradient(
-                listOf(NeonCyan.copy(alpha = 0.9f), EmeraldPulse.copy(alpha = 0.7f))
+                if (workerState.isLoginRequired) {
+                    listOf(AmberWarning, AmberWarning)
+                } else {
+                    listOf(NeonCyan.copy(alpha = 0.95f), EmeraldPulse.copy(alpha = 0.85f))
+                }
             )
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("ai_automation_browser_promo_card")
+            .testTag("ai_worker_home_card")
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
+            // Header Row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -982,20 +1017,23 @@ private fun AiAutomationBrowserPromoCard(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(EmeraldPulse.copy(alpha = 0.2f))
+                            .background(
+                                if (workerState.isLoginRequired) AmberWarning.copy(alpha = 0.25f)
+                                else EmeraldPulse.copy(alpha = 0.2f)
+                            )
                     ) {
-                        Text(text = "🌐", style = MaterialTheme.typography.titleMedium)
+                        Text(text = if (workerState.isLoginRequired) "🔒" else "🤖", fontSize = 18.sp)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "AI Automation Browser",
+                            text = "AI Autonomous Task Worker",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = EmeraldPulse
+                            color = if (workerState.isLoginRequired) AmberWarning else EmeraldPulse
                         )
                         Text(
-                            text = "In-App Web Runner • DOM Automation",
+                            text = if (workerState.isRunning) "● Working autonomously in background..." else "Execute any workflow with one tap",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1004,49 +1042,226 @@ private fun AiAutomationBrowserPromoCard(
 
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = NeonCyan.copy(alpha = 0.18f),
-                    border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
+                    color = if (workerState.isRunning) EmeraldPulse.copy(alpha = 0.2f) else NeonCyan.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, if (workerState.isRunning) EmeraldPulse else NeonCyan.copy(alpha = 0.5f))
                 ) {
                     Text(
-                        text = "NEW",
+                        text = if (workerState.isRunning) "ACTIVE" else "AUTONOMOUS",
                         style = MaterialTheme.typography.labelSmall,
-                        color = NeonCyan,
+                        color = if (workerState.isRunning) EmeraldPulse else NeonCyan,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "Runs directly inside the app with persistent logins! Automate course searches on Infosys Wingspan, inject scripts to filter topics, and extract exact course titles.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
-            )
+            // Warning Notice if Login is Required
+            if (workerState.isLoginRequired) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = AmberWarning.copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = AmberWarning,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Sign-in required for this task! Tap 'View' to log in once. (Only login page responds to user touches)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AmberWarning,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Command Input Box
+            AnimatedVisibility(visible = workerState.isTextInputVisible) {
+                Column {
+                    OutlinedTextField(
+                        value = workerState.currentInstruction,
+                        onValueChange = onUpdateInstruction,
+                        placeholder = {
+                            Text(
+                                "e.g., goto infosys springboard home page and goto search and enter Spring 5 Basics and add filter course and complete on task",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        },
+                        maxLines = 3,
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("home_ai_worker_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.clickable {
+                            onUpdateInstruction(presetExample)
+                        }
+                    ) {
+                        Text(
+                            text = "💡 Tap to fill: \"$presetExample\"",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
+
+            // Control Buttons Row:
+            // Left: [💬 Text] and [👁️ View]
+            // Right: [⚡ RUN]
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                // Button 1 (Left): 💬 Text
+                FilledTonalButton(
+                    onClick = onToggleTextInput,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (workerState.isTextInputVisible) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .height(46.dp)
+                        .testTag("home_worker_text_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Text Command",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Text", fontWeight = FontWeight.Bold)
+                }
+
+                // Button 2 (Left): 👁️ View
                 Button(
-                    onClick = onOpenInfosys,
+                    onClick = onToggleView,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (workerState.isLoginRequired) AmberWarning else if (workerState.isFloatingWindowOpen) NeonCyan.copy(alpha = 0.8f) else MaterialTheme.colorScheme.secondary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .height(46.dp)
+                        .testTag("home_worker_view_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Visibility,
+                        contentDescription = "View Work",
+                        modifier = Modifier.size(16.dp),
+                        tint = if (workerState.isLoginRequired) Color.Black else Color.White
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (workerState.isLoginRequired) "Login View 🔒" else "View 👁️",
+                        fontWeight = FontWeight.Bold,
+                        color = if (workerState.isLoginRequired) Color.Black else Color.White
+                    )
+                }
+
+                // Button 3 (Right): [⚡ RUN]
+                Button(
+                    onClick = onRunTask,
+                    enabled = !workerState.isRunning && workerState.currentInstruction.isNotBlank(),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     ),
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("open_infosys_browser_button")
+                        .height(46.dp)
+                        .testTag("home_worker_run_button")
                 ) {
-                    Text("🏢 Open Infosys Wingspan", fontWeight = FontWeight.Bold)
+                    if (workerState.isRunning) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Working...", fontWeight = FontWeight.Bold)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("⚡ RUN", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                    }
                 }
+            }
 
-                OutlinedButton(
-                    onClick = onOpenGeneric,
-                    shape = RoundedCornerShape(14.dp)
+            // Status Progress Line
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    Text("Open Browser")
+                    if (workerState.isRunning) {
+                        CircularProgressIndicator(
+                            strokeWidth = 1.6.dp,
+                            color = NeonCyan,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    } else if (workerState.phase == WorkerPhase.COMPLETED) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = EmeraldPulse,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = workerState.currentStepStatus,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
